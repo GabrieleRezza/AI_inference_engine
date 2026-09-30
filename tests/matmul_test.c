@@ -36,7 +36,7 @@ int main(){
     B->data[5] = -1;
     PrintMatrix(A);
     PrintMatrix(B);
-    MatMul_SIMD(A, B, output);
+    Choose_Matmul_Method(A, B, output);
 
     PrintMatrix(output);
     DeleteMatrix(A);

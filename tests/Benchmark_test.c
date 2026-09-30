@@ -24,7 +24,6 @@ int main(){
         DeleteMatrix(B);
         return 0;
     }
-    printf("vaffanculo");
     InitMatrixRandom(A);
     InitMatrixRandom(B);
     average_time = BenchmarkMatMul(A, B, output, 10);
@@ -34,6 +33,6 @@ int main(){
     DeleteMatrix(A);
     DeleteMatrix(B);
     DeleteMatrix(output);
-    printf("eliminated");
+    printf("eliminated\n");
     return 0;
 }

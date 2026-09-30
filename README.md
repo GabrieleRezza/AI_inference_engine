@@ -71,7 +71,6 @@ BenchmarkMatMul times based on matrix size and iterations
 | 256x256  x  256x256 | 100 |  0.096  s |  0.085/86 s |  0.086/87 s |  0.087 s   ||    0.012 s   |  X 8.00
 | 512x512  x  512x512 | 10  |   1.13 s  |  0.69/70 s  |  0.69/70 s  |  0.697 s   ||    0.11 s    |  X 10.27
  
-
 After experimenting with different sizes for cache blocking it can be observed a small increase in performance for Vect X Matrix multiplications: around 
 12% and 36% respectively for 256x256 and 512x512. 
 With MatrixXMatrix multiplications the impact is similar: 38% for 512x512 and 10% for 256x256.
@@ -81,4 +80,15 @@ loop reordering is what is principally responsible for faster times.
 Also, when vectors are involved, cache blocking is only partially exploited since it's less effective on the vector and it only affects the efficiency
 when the matrix is larger.
 
-In this project, since the kind of multiplication will always be vect X matrix, the benw=efit will always come proportionally from the size of the matrices.
+In this project, since the kind of multiplication will always be vect X matrix, the benefit will always come proportionally from the size of the matrices.
+
+
+
+|    Size    |  Iterations  |   Naive (s)  |  SIMD + Optimized Threading BLOCK 128 |     Speedup       | 
+|  Vect  x  256X256  | 1500 |   0.0004 s   |             0.000082 s                |   X  4.878
+|  Vect  x  512x512  |  150 |   0.0022 s   |             0.000140 s                |   X  15.71
+| 256x256  x  256x256 | 100 |   0.096  s   |             0.0039   s                |   X  24.61 
+| 512x512  x  512x512 | 10  |    1.13 s    |             0.0325   s                |   X  34.77
+
+
+DEVO ORA CREARE FUNZIONE SEPARATA PER CASI CON RIGHE MINORI DI 512 IN MODO CHE SI USI SIMD E BASTA E RISPONDERE ALLE ULTIME DOMANDE DI CLAUDE

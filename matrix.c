@@ -2,8 +2,9 @@
 #include <stdio.h>
 #include <time.h>
 #include <immintrin.h>
+#include <omp.h>
 #include "matrix.h"
-#define BLOCK_SIZE 32
+#define BLOCK_SIZE 128
 
 int min(int A, int B){
     if(A <= B)
@@ -113,7 +114,7 @@ void MatMul(matrix_t* A, matrix_t* B, matrix_t* output){
     //First we need to clean the output matrix from the previous results
     CleanMatrix(output);
     for(block_i = 0; block_i < output->rows; block_i += BLOCK_SIZE)
-        for(block_k = 0; block_k < B->rows; block_k += BLOCK_SIZE)
+        for(block_k = 0; block_k < B->rows; block_k += BLOCK_SIZE){
             for(block_j = 0; block_j < B->cols; block_j += BLOCK_SIZE){
                 min_i = min(block_i + BLOCK_SIZE, output->rows);
                 min_j = min(block_j + BLOCK_SIZE, B->cols);
@@ -124,9 +125,10 @@ void MatMul(matrix_t* A, matrix_t* B, matrix_t* output){
                             output->data[i*output->cols + j] += A->data[i*A->cols + k] * B->data[k*B->cols + j];
                     
             }
+        }
 }
 
-void MatMul_SIMD(matrix_t* A, matrix_t* B, matrix_t* output){
+void MatMul_SIMD_Blocks(matrix_t* A, matrix_t* B, matrix_t* output){
     int i, j, k, block_i, block_k, block_j, min_i, min_j, min_k;
     
     //first we need to check if the multiplication is actually possible, even if it was probably checked before
@@ -138,37 +140,109 @@ void MatMul_SIMD(matrix_t* A, matrix_t* B, matrix_t* output){
     output->cols = B->cols;
     //First we need to clean the output matrix from the previous results
     CleanMatrix(output);
-    for(block_i = 0; block_i < output->rows; block_i += BLOCK_SIZE)
-        for(block_j = 0; block_j < B->cols; block_j += BLOCK_SIZE)
-            for(block_k = 0; block_k < B->rows; block_k += BLOCK_SIZE){
-                min_i = min(block_i + BLOCK_SIZE, output->rows);
-                min_j = min(block_j + BLOCK_SIZE, B->cols);
-                min_k = min(block_k + BLOCK_SIZE, B->rows);
-                for(i = block_i; i < min_i; i++){
-                    for(j = block_j; j < min_j - (min_j % 8); j += 8){
 
-                        __m256 rc = _mm256_loadu_ps(&output->data[i*output->cols + j]);
+    omp_set_num_threads(omp_get_max_threads());
+    #pragma omp parallel private(i,j,k, block_i, block_j, block_k, min_i, min_j, min_k) shared(A, B, output) 
+    {
+        for(block_i = 0; block_i < output->rows; block_i += BLOCK_SIZE){
+            for(block_j = 0; block_j < B->cols; block_j += BLOCK_SIZE){
+                for(block_k = 0; block_k < B->rows; block_k += BLOCK_SIZE){
+                    min_i = min(block_i + BLOCK_SIZE, output->rows);
+                    min_j = min(block_j + BLOCK_SIZE, B->cols);
+                    min_k = min(block_k + BLOCK_SIZE, B->rows);
 
-                        for(k = block_k; k < min_k; k++){
+                    //Creating a parallel for loop by collapsing the i and j loops to speed up the multiplication process
+                    //I can only collapse two loops because the k loop has a cumulative effect on the output matrix, so it cannot be parallelized
+                    #pragma omp for collapse(2)     
+                    for(i = block_i; i < min_i; i++){
+                        for(j = block_j; j < min_j - (min_j % 8); j += 8){
 
-                            __m256 ra = _mm256_set1_ps(A->data[i*A->cols + k]);
-                            
-                            __m256 rb = _mm256_loadu_ps(&B->data[k*B->cols + j]);
-                            
-                            rc = _mm256_fmadd_ps(ra, rb, rc);
+                            __m256 rc = _mm256_loadu_ps(&output->data[i*output->cols + j]);
+
+                            for(k = block_k; k < min_k; k++){
+
+                                __m256 ra = _mm256_set1_ps(A->data[i*A->cols + k]);
+                                    
+                                __m256 rb = _mm256_loadu_ps(&B->data[k*B->cols + j]);
+                                
+                                rc = _mm256_fmadd_ps(ra, rb, rc);
+                            }
+
+                            _mm256_storeu_ps(&output->data[i*output->cols + j], rc);
 
                         }
-
-                        _mm256_storeu_ps(&output->data[i*output->cols + j], rc);
                     }
-
-                    if((min_j % 8) != 0){
-                        for(j = j; j < min_j; j++)
-                            for(k = block_k; k < min_k; k++)
-                                output->data[i*output->cols + j] += A->data[i*A->cols + k] * B->data[k*B->cols + j];
+                    
+                    //Handling the remaining columns that are not a multiple of 8 outside of the parallelized loop
+                    #pragma omp for
+                    for(i = block_i; i < min_i; i++){
+                        if((min_j % 8) != 0){
+                                for(j = min_j - (min_j % 8); j < min_j; j++)
+                                    for(k = block_k; k < min_k; k++)
+                                        output->data[i*output->cols + j] += A->data[i*A->cols + k] * B->data[k*B->cols + j];
+                        }
                     }
                 }
             }
+        }
+    }
+}
+
+void MatMul_SIMD_Vector(matrix_t* A, matrix_t* B, matrix_t* output){
+    int i, j, k;
+    
+    //first we need to check if the multiplication is actually possible, even if it was probably checked before
+    if(A->cols != B->rows){
+        printf("Multiplication impossible, wrong dimensions. \n");
+        return;
+    }
+    output->rows = A->rows;
+    output->cols = B->cols;
+    //First we need to clean the output matrix from the previous results
+    CleanMatrix(output);
+
+    omp_set_num_threads(omp_get_max_threads());
+    #pragma omp parallel private(i,j,k) shared(A, B, output) 
+    {
+        #pragma omp for collapse(2)
+        for(i = 0; i < output->rows; i++){  //The i loop is always only one iteration since the output matrix is always 1xN, but it is kept for generality
+            for(j = 0; j < output->cols - (output->cols % 8); j += 8){
+
+                __m256 rc = _mm256_loadu_ps(&output->data[i*output->cols + j]);
+
+                for(k = 0; k < A->cols; k++){
+
+                    __m256 ra = _mm256_set1_ps(A->data[i*A->cols + k]);
+                        
+                    __m256 rb = _mm256_loadu_ps(&B->data[k*B->cols + j]);
+                    
+                    rc = _mm256_fmadd_ps(ra, rb, rc);
+                }
+
+                _mm256_storeu_ps(&output->data[i*output->cols + j], rc);
+
+            }
+        }
+        
+        //Handling the remaining columns that are not a multiple of 8 outside of the parallelized loop
+        #pragma omp for
+        for(i = 0; i < output->rows; i++){
+            if((output->cols % 8) != 0){
+                    for(j = output->cols - (output->cols % 8); j < output->cols; j++)
+                        for(k = 0; k < A->cols; k++)
+                            output->data[i*output->cols + j] += A->data[i*A->cols + k] * B->data[k*B->cols + j];
+            }
+        }
+    }
+}
+
+void Choose_Matmul_Method(matrix_t* A, matrix_t* B, matrix_t* output){
+    if(A->rows == 1){
+        MatMul_SIMD_Vector(A, B, output);
+    }
+    else{
+        MatMul_SIMD_Blocks(A, B, output);
+    }
 }
 
 void BiasSum(matrix_t* output, matrix_t* bias){

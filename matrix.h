@@ -11,7 +11,9 @@ typedef struct{
 matrix_t* CreateMatrix(int row, int col);
 void DeleteMatrix(matrix_t* A);
 void MatMul(matrix_t* A, matrix_t* B, matrix_t* output);
-void MatMul_SIMD(matrix_t* A, matrix_t* B, matrix_t* output);
+void Choose_Matmul_Method(matrix_t* A, matrix_t* B, matrix_t* output);
+void MatMul_SIMD_Blocks(matrix_t* A, matrix_t* B, matrix_t* output);
+void MatMul_SIMD_Vector(matrix_t* A, matrix_t* B, matrix_t* output);
 void BiasSum(matrix_t* A, matrix_t* bias);
 void InitMatrixRandom(matrix_t* A);
 void CleanMatrix(matrix_t* A);

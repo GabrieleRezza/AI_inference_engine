@@ -155,7 +155,7 @@ double BenchmarkMatMul(matrix_t *A, matrix_t *B, matrix_t *output, int iteration
 
     start = clock();
     for(i = 0; i < iterations; i++){
-        MatMul_SIMD(A,B,output);
+        Choose_Matmul_Method(A,B,output);
     }
     end = clock();
 
