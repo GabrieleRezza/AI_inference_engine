@@ -8,17 +8,17 @@ int main(){
     matrix_t *A, *B, *output;
     double average_time;
 
-    A = CreateMatrix(512, 512);
+    A = CreateMatrix(1, 1024);
     if(A == NULL)
         return 0;
 
-    B = CreateMatrix(512, 512);
+    B = CreateMatrix(1024, 1024);
     if(B == NULL){
         DeleteMatrix(A);
         return 0;
     }
 
-    output = CreateMatrix(512, 512);
+    output = CreateMatrix(1, 1024);
     if(output == NULL){
         DeleteMatrix(A);
         DeleteMatrix(B);
@@ -26,7 +26,7 @@ int main(){
     }
     InitMatrixRandom(A);
     InitMatrixRandom(B);
-    average_time = BenchmarkMatMul(A, B, output, 10);
+    average_time = BenchmarkMatMul(A, B, output, 100);
  
     printf("Tempo medio per operazione: %f\n\n", average_time);
 

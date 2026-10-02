@@ -205,7 +205,7 @@ void MatMul_SIMD_Vector(matrix_t* A, matrix_t* B, matrix_t* output){
     #pragma omp parallel private(i,j,k) shared(A, B, output) 
     {
         #pragma omp for collapse(2)
-        for(i = 0; i < output->rows; i++){  //The i loop is always only one iteration since the output matrix is always 1xN, but it is kept for generality
+        for(i = 0; i < output->rows; i++){  
             for(j = 0; j < output->cols - (output->cols % 8); j += 8){
 
                 __m256 rc = _mm256_loadu_ps(&output->data[i*output->cols + j]);
@@ -237,7 +237,7 @@ void MatMul_SIMD_Vector(matrix_t* A, matrix_t* B, matrix_t* output){
 }
 
 void Choose_Matmul_Method(matrix_t* A, matrix_t* B, matrix_t* output){
-    if(A->rows == 1){
+    if(A->rows == 1 && B->rows < 2000){
         MatMul_SIMD_Vector(A, B, output);
     }
     else{
