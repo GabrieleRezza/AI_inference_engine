@@ -85,10 +85,13 @@ In this project, since the kind of multiplication will always be vect X matrix, 
 
 
 |    Size    |  Iterations  |   Naive (s)  |  SIMD + Optimized Threading BLOCK 128 |     Speedup       | 
-|  Vect  x  256X256  | 1500 |   0.0004 s   |             0.000082 s                |   X  4.878
-|  Vect  x  512x512  |  150 |   0.0022 s   |             0.000140 s                |   X  15.71
+|  Vect  x  256X256  | 1500 |   0.0004 s   |             0.00008  s                |   X  5.00
+|  Vect  x  512x512  |  150 |   0.0022 s   |             0.00014  s                |   X  15.71
 | 256x256  x  256x256 | 100 |   0.096  s   |             0.0039   s                |   X  24.61 
 | 512x512  x  512x512 | 10  |    1.13 s    |             0.0325   s                |   X  34.77
 
+After implementing threading and optimizing it by creating two different functions (one for general matrices and one specifically designed for vectors), the results of the benchmark tests are better than expected. 
+For bigger vectors we observe a doubling in speedup compared to just the SIMD function, while with matc=rices multiplications we are over the 3X mark compared to just the implementation of SIMD.
+The only visible downside is with smaller vectors: here the threading actually slows down the process by 0.00003 s overall, due to the larger overhead in the instruction that unfortunately has a bigger impact than the improvement received by threading, therefore making it slightly worse. I still decided to keep this structure even if the previous version was better for performance because it was just a matter of copying the previous setup and for my projects aim I find this discovery more educationally relevant than a mere 0.0003 optimization of an edge case.
 
-DEVO ORA CREARE FUNZIONE SEPARATA PER CASI CON RIGHE MINORI DI 512 IN MODO CHE SI USI SIMD E BASTA E RISPONDERE ALLE ULTIME DOMANDE DI CLAUDE
+Tests using dynamic scheduling: little to no difference can be observed, the operating times are basically the same, just slightly worse for dynamic scheduling, unnoticeble in the the big picture. The simple static scheduling is perfect for this project since every matmul divides the multiplications evenly for every cicle of the for loop, making the overhead of the dynamic scheduling useless for what it actually brings as an optimization.

@@ -153,7 +153,7 @@ void MatMul_SIMD_Blocks(matrix_t* A, matrix_t* B, matrix_t* output){
 
                     //Creating a parallel for loop by collapsing the i and j loops to speed up the multiplication process
                     //I can only collapse two loops because the k loop has a cumulative effect on the output matrix, so it cannot be parallelized
-                    #pragma omp for collapse(2)     
+                    #pragma omp for collapse(2)  
                     for(i = block_i; i < min_i; i++){
                         for(j = block_j; j < min_j - (min_j % 8); j += 8){
 
@@ -237,7 +237,7 @@ void MatMul_SIMD_Vector(matrix_t* A, matrix_t* B, matrix_t* output){
 }
 
 void Choose_Matmul_Method(matrix_t* A, matrix_t* B, matrix_t* output){
-    if(A->rows == 1 && B->rows < 2000){
+    if(A->rows == 1){
         MatMul_SIMD_Vector(A, B, output);
     }
     else{
