@@ -24,12 +24,14 @@ Q_matrix8_t *createMatrix8(int row, int col);
 void deleteMatQ32(Q_matrix32_t *mat);
 //Delete a type Q_matrix8_t matrix 
 void deleteMatQ8(Q_matrix8_t *mat);
-//Matmul funtion using quantization, int8 data type multiplied into an int16 register and accumulated in an int32. The final result is ri-quantized again before the end of the function
+/*Matmul funtion using quantization, int8 data type multiplied into an int16 register and accumulated in an int32.
+ The final result is ri-quantized again before the end of the function. 
+ NOTE: the elements are shifted by 127 / 63 directly in the matmul during SIMD*/
 void qMatmulSIMD(Q_matrix8_t *A, Q_matrix8_t *B, Q_matrix32_t *acc, Q_matrix8_t *output);
-//Quantize a float matrix into an int8 matrix
-void quantize(matrix_t *origin, Q_matrix8_t *output);
-//Rebuilds the original float matrix from an int8 matrix thanks to the scale factor 
-void requantize(Q_matrix8_t *mat8, matrix_t *matf);
+//Quantize a float matrix into an int8 matrix, return -1 if any error occurs
+int quantize(matrix_t *origin, Q_matrix8_t *output, float max_value);
+//Rebuilds the original float matrix from an int8 matrix thanks to the scale factor. return -1 if any error occurs 
+int dequantize(Q_matrix8_t *mat8, matrix_t *matf);
 
 
 
