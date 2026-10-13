@@ -140,14 +140,61 @@ int dequantize(Q_matrix8_t* input, matrix_t* output){
     mat_dim = input->cols * input->rows;
     if (input->scale_factor == 0.0f)
         dequantize_factor = 1.0f;
+    else {
+        dequantize_factor = 1.0f / input->scale_factor;
 
-    dequantize_factor = 1.0f / input->scale_factor;
+    }
+
     for(i = 0; i < mat_dim; i++){
         output->data[i] = (float) input->data_8[i] * dequantize_factor;
     }
     return 0;
 }
 
+int dequantizeSIMD(const Q_matrix8_t *input, matrix_t *output) {
+    int i, mat_dim;
+    float dequantize_factor;
+
+    if (input == NULL || output == NULL || input->rows == 0 || input->cols == 0) {
+        printf("Invalid input\n");
+        return -1;
+    }
+
+    output->rows = input->rows;
+    output->cols = input->cols;
+    mat_dim = input->cols * input->rows;
+    
+    if (input->scale_factor == 0.0f) {
+        dequantize_factor = 1.0f;
+    } else {
+        dequantize_factor = 1.0f / input->scale_factor;
+    }
+
+    __m256 v_factor = _mm256_set1_ps(dequantize_factor);
+
+    #pragma omp parallel for schedule(static)
+    for (i = 0; i <= mat_dim - 8; i += 8) {
+        /* Load 8 * int8 */
+        __m128i v_in_8 = _mm_loadl_epi64((const __m128i*)&input->data_8[i]);
+
+        /*Sign-extension: 8 x int8 -> 8 x int32 su __m256i */
+        __m256i v_in_32 = _mm256_cvtepi8_epi32(v_in_8);
+
+        /* Int ---> float */
+        __m256 v_f32 = _mm256_cvtepi32_ps(v_in_32);
+
+        /* Dequantizing */
+        __m256 v_res = _mm256_mul_ps(v_f32, v_factor);
+
+        _mm256_storeu_ps(&output->data[i], v_res);
+    }
+
+    for (i = i; i < mat_dim; i++) {
+        output->data[i] = (float)input->data_8[i] * dequantize_factor;
+    }
+
+    return 0;
+}
 
 
 

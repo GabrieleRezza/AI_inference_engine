@@ -32,6 +32,8 @@ int qMatmulSIMD(Q_matrix8_t *A, Q_matrix8_t *B, Q_matrix32_t *acc, Q_matrix8_t *
 int quantize(matrix_t *origin, Q_matrix8_t *output, float max_value);
 //Rebuilds the original float matrix from an int8 matrix thanks to the scale factor. return -1 if any error occurs 
 int dequantize(Q_matrix8_t *mat8, matrix_t *matf);
+//Rebuild the original float matrix from an int8 matrix using SIMD and threading
+int dequantizeSIMD(const Q_matrix8_t *input, matrix_t *output);
 //Requantize the int32 matrix into a int8 matrix. If error return -1
 int requantize(Q_matrix32_t* input, Q_matrix8_t* output, float max_value);
 //Requantize from int32 to int8 using SIMD and threading
