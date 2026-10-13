@@ -4,6 +4,12 @@
 #include <stdio.h>
 
 
+/*INSERISCI FUNZIONE CHE CALCOLI AUTOMATICAMENTE L'ERRORE, OVVERO TENGA IL MASSIMO TRA TUTTE LE DIFFERENZE
+| ORIGIN->DATA[i] - DEQUANTIZED_MATRIX[i] |. Alla fine si confronta questo valore con il teorico 0.5 / scale
+e si verifica che sia compatibile */
+
+
+
 int main(){
     matrix_t *A; 
     Q_matrix8_t *output;
