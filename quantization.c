@@ -6,8 +6,9 @@
 #include <math.h>
 #include "matrix.h"
 #include "quantization.h"
-
-#define REQ_PAR_THRESHOLD 65536   /* sotto questa soglia niente parallelismo: da tarare col benchmark */
+#include <assert.h>
+#define Q_PAR_THRESHOLD 65536   
+#define REQ_PAR_THRESHOLD 65536   
 
 Q_matrix32_t *createMatrix32(int rows, int cols){
     Q_matrix32_t *mat;
@@ -82,47 +83,93 @@ void deleteMatQ8(Q_matrix8_t *mat){
 }
 
 
+static inline float hmax_ps_avx2(__m256 v) {
+    __m128 lo  = _mm256_castps256_ps128(v);
+    __m128 hi  = _mm256_extractf128_ps(v, 1);
+    __m128 max = _mm_max_ps(lo, hi);
 
-//max value == 127 or
-int quantize(matrix_t *input, Q_matrix8_t *mat8, float max_value){
-    float abs_value, max_abs = 0.0f, temp;
-    int i, mat_dim;
-    if(input == NULL || mat8 == NULL || input->rows == 0 || input->cols == 0){
+    max = _mm_max_ps(max, _mm_shuffle_ps(max, max, _MM_SHUFFLE(1, 0, 3, 2)));
+    max = _mm_max_ps(max, _mm_shuffle_ps(max, max, _MM_SHUFFLE(2, 3, 0, 1)));
+
+    return _mm_cvtss_f32(max);
+}
+
+
+
+int quantizeSIMD(const matrix_t *input, Q_matrix8_t *mat8, float qmax) {
+    if (input == NULL || mat8 == NULL || input->rows == 0 || input->cols == 0) {
         printf("Empty matrix \n");
         return -1;
     }
-    
-    mat_dim = input->cols * input->rows;
-    //searching for max value of the matrix
-    for(i = 0; i < mat_dim; i++){
-        abs_value = fabsf(input->data[i]);
+    assert(mat8->rows == input->rows && mat8->cols == input->cols);
 
-        if (abs_value > max_abs)
-            max_abs = abs_value;
+    const int mat_dim = input->rows * input->cols;
+    const int vec_end = mat_dim & ~7;
+    const int par = (mat_dim >= Q_PAR_THRESHOLD);
+    const float *data = input->data;
+    float max_abs = 0.0f;
+
+    const __m256 sign_mask = _mm256_castsi256_ps(_mm256_set1_epi32(0x7FFFFFFF));
+
+    #pragma omp parallel if(par)
+    {
+        __m256 vmax = _mm256_setzero_ps();
+
+        #pragma omp for nowait
+        for (int i = 0; i < vec_end; i += 8) {
+            __m256 a = _mm256_and_ps(_mm256_loadu_ps(&data[i]), sign_mask);
+            vmax = _mm256_max_ps(vmax, a);
+        }
+
+        float t = hmax_ps_avx2(vmax);
+        #pragma omp critical
+        { if (t > max_abs) max_abs = t; }
     }
 
-    //if max_abs == 0 I force into 1
-    if (max_abs == 0.0f)
+    for (int i = vec_end; i < mat_dim; i++) {
+        float a = fabsf(data[i]);
+        if (a > max_abs) max_abs = a;
+    }
+
+    if (!isfinite(max_abs)) {          
+        printf("Non-finite values in input \n");
+        return -1;
+    }
+
+    if (max_abs == 0.0f) {
         mat8->scale_factor = 1.0f;
-    else{
-        mat8->scale_factor = max_value / max_abs;
-        if (!isfinite(mat8->scale_factor)) {   // inf (max_abs) o NaN
+    } else {
+        mat8->scale_factor = qmax / max_abs;
+        if (!isfinite(mat8->scale_factor)) {   
             printf("Invalid scale factor \n");
             return -1;
         }
     }
-    //copying the matrix into the int8 version
-    for(i = 0; i < mat_dim; i++){
-        temp =  roundf(input->data[i] * mat8->scale_factor);
-        //technically the quantized values should not overflow since even the scale factor is set on max_abs
-        //we still clamp for good measure
-        if (temp > max_value)
-            temp = max_value;
-        else if(temp < -max_value )
-            temp = -max_value;
 
-        mat8->data_8[i] = (int8_t)temp;
+    const float scale = mat8->scale_factor;
+    const __m256 v_scale = _mm256_set1_ps(scale);
+    const __m256 v_hi    = _mm256_set1_ps(qmax);
+    const __m256 v_lo    = _mm256_set1_ps(-qmax);
+
+    #pragma omp parallel for schedule(static) if(par)
+    for (int i = 0; i < vec_end; i += 8) {
+        __m256 f = _mm256_mul_ps(_mm256_loadu_ps(&data[i]), v_scale);
+        f = _mm256_min_ps(_mm256_max_ps(f, v_lo), v_hi);
+        __m256i r32 = _mm256_cvtps_epi32(f);      /* round-to-nearest-even */
+
+        __m128i v16 = _mm_packs_epi32(_mm256_castsi256_si128(r32),
+                                      _mm256_extracti128_si256(r32, 1));
+        __m128i v8  = _mm_packs_epi16(v16, _mm_setzero_si128());
+        _mm_storel_epi64((__m128i *)&mat8->data_8[i], v8);
     }
+
+    for (int i = vec_end; i < mat_dim; i++) {
+        float t = data[i] * scale;
+        if (t > qmax)       t = qmax;
+        else if (t < -qmax) t = -qmax;
+        mat8->data_8[i] = (int8_t)lrintf(t);
+    }
+
     return 0;
 }
 

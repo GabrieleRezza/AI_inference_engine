@@ -30,7 +30,6 @@ int main(){
     A->data[3] = -3.7;
     A->data[4] = -1.7;
     A->data[5] = -0.23;
-
     PrintMatrix(A);
     
     if (quantize(A, output, 63) == -1){
