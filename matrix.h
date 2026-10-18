@@ -1,5 +1,6 @@
 #ifndef MATRIX_H
 #define MATRIX_H
+#define BLOCK_SIZE 128
 //Since allocating a normal matrix is inconvenient and inefficient, a 1D array is used instead, with rows and cols indicated
 typedef struct{
     float *data;
