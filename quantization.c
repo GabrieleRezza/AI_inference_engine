@@ -83,6 +83,30 @@ void deleteMatQ8(Q_matrix8_t *mat){
 }
 
 
+void CleanInt8Mat(Q_matrix8_t *mat){
+    int dim = mat->cols * mat->rows, i;
+
+    if (mat == NULL){
+        printf("Null matrix input. \n\n");
+        return;
+    }
+
+    for(i = 0; i < dim; i++)
+        mat->data_8[i] = (int8_t) 0;
+}
+
+void CleanInt32Mat(Q_matrix32_t *mat){
+    int dim = mat->cols * mat->rows, i;
+
+    if (mat == NULL){
+        printf("Null matrix input. \n\n");
+        return;
+    }
+
+    for(i = 0; i < dim; i++)
+        mat->data_32[i] = (int32_t) 0;
+}
+
 static inline float hmax_ps_avx2(__m256 v) {
     __m128 lo  = _mm256_castps256_ps128(v);
     __m128 hi  = _mm256_extractf128_ps(v, 1);
@@ -407,5 +431,117 @@ int requantizeSIMD(const Q_matrix32_t *input, Q_matrix8_t *output, float max_val
 
 
 int qMatmulSIMD(Q_matrix8_t* A, Q_matrix8_t* B, Q_matrix32_t* acc, Q_matrix8_t* output){
+    int A_dim, B_dim, block_i, block_j, block_k, min_i, min_j, min_k, i, j, k;
+    int B_column_sum [B->cols], stop_sum;
+    
+    if(A == NULL || B == NULL ||acc == NULL || A->data_8 == NULL || B->data_8 == NULL || acc->data_32 == NULL || A->cols != B->rows){
+        printf("Invalid matrices \n\n");
+        return -1;
+    }
 
+    A_dim = A->cols * A->rows;
+    B_dim = B->cols * B->rows;
+
+    output->rows = A->rows;
+    output->cols = B->cols;
+    
+    //The output matrix does not need to be cleaned since it will be overwritten
+    CleanInt32Mat(acc);
+
+
+    for(i = 0; i < B->cols; i++)
+        B_column_sum[i] = 0;
+    
+    omp_set_num_threads(omp_get_max_threads());
+
+    stop_sum = B->cols - (B->cols % 32); //if b->cols < 32 --> stop_sum = 0
+
+    if(B->cols >= 32){
+
+        #pragma omp parallel for private(j) schedule(static)
+        {
+            for(i = 0; i < stop_sum; i+=32){
+                
+
+                __m256i acc1 = _mm256_setzero_si256();
+                __m256i acc2 = _mm256_setzero_si256();
+                __m256i acc3 = _mm256_setzero_si256();
+                __m256i acc4 = _mm256_setzero_si256();
+                for(j = 0; j < B->rows; j++){
+
+                    __m256i load = _mm256_loadu_si256((__m256i const*)&B->data_8[j*B->cols + i]);
+
+                    __m128i lo = _mm256_castsi256_si128(load);
+                    __m128i hi = _mm256_extracti128_si256(load, 1);
+
+                    __m256i temp = _mm256_cvtepi8_epi32(lo);//1-8
+                    acc1 = _mm256_add_epi32(acc1, temp);
+
+                    temp = _mm256_cvtepi8_epi32(_mm_bsrli_si128(lo, 8)); //9-16
+                    acc2 = _mm256_add_epi32(acc2, temp);
+
+                    temp = _mm256_cvtepi8_epi32(hi); //17-24
+                    acc3 = _mm256_add_epi32(acc3, temp);
+
+                    temp = _mm256_cvtepi8_epi32(_mm_bsrli_si128(hi, 8)); //25-32
+                    acc4 = _mm256_add_epi32(acc4, temp);
+                    
+                }
+                _mm256_storeu_si256((__m256i *)&B_column_sum[i], acc1);
+                _mm256_storeu_si256((__m256i *)&B_column_sum[i + 8], acc2);
+                _mm256_storeu_si256((__m256i *)&B_column_sum[i + 16], acc3);
+                _mm256_storeu_si256((__m256i *)&B_column_sum[i + 24], acc4);
+            }
+        }
+    }
+
+    if (stop_sum < B->cols){
+        for(i = 0; i < B->rows; i++){
+            for(j = stop_sum; j < B->cols; j++){
+                B_column_sum[j] += B->data_8[i*B->cols + j];
+            }
+        }
+    }
+
+    #pragma omp parallel
+    {
+        for(block_i = 0; block_i < output->rows; block_i += BLOCK_SIZE){
+            for(block_j = 0; block_j < output->cols; block_j += BLOCK_SIZE){
+                for(block_k = 0; block_k < B->rows; block_k += BLOCK_SIZE){
+                    min_i = min(block_i + BLOCK_SIZE, output->rows);
+                    min_j = min(block_j + BLOCK_SIZE, output->cols);
+                    min_k = min(block_k + BLOCK_SIZE, B->rows);
+
+
+                    
+                    for(i = block_i; i < min_i; i++){
+                        for(j = block_j; j < min_j - (min_j % 8); j += 8){
+
+                            //ATTENZIONE qui devo aggiungere a ogni ra in ingresso 127 per usare maddubs 
+                            //POI a fine accumulazione per ogni elemento tolgo lo shift: -127 * sommacolonnaB_j
+                            //tutto prima di passare a requantize
+                            __m256i r_acc = _mm256_loadu_si256((const __m256i *)&acc->data_32[i*output->cols + j]);
+
+                            for(k = block_k; k < min_k; k++){
+
+                                __m256i ra8 = _mm256_set1_epi8(A->data_8[i*A->cols + k]);
+                                    
+                                __m256i rb8 = _mm256_loadu_si256((const __m256i *)&B->data_8[k*B->cols + j]);
+                                
+                                //ora ho il vettore dove accumulare e i due vettori che vanno moltiplicati
+
+                                
+                            }
+
+                            //store
+
+                        }
+                    }
+                    
+                    //Handling the remaining columns that are not a multiple of 8 outside of the parallelized loop
+                    
+                }
+            }
+        }
+    }
 }
