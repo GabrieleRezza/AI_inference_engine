@@ -8,6 +8,8 @@ This project is a personal learning journey behind the world of AI.
 My goal was to expand my portfolio, analizing the low-level programming of AI by build a full operational neural engine by hand with the help of Claude, which was guiding me through the project and helping me to correct my mistakes, while always keeping the distance and never writing code by itself.
 This neural engine will probably be reused in a later project or rivisited later to adapt it to other uses.
 
+> **Note on authorship:** the whole project has been written entirely by hand, with the only exception of the correction of the final steps of the quantization functions (the int8 matmul kernel `qMatmulAcc32`/`qMatmulSIMD`, `dequantizeAcc32` and the fixes to the other quantization functions) and the creation of the quantized forward pass (`QuantizeNetwork`, `QForwardPass`, `FreeQNetwork`) together with its test `tests/qmatmul_test.c`, which were implemented by Claude after a review of my code.
+
 
 ## Project Structure
 
@@ -18,6 +20,9 @@ AI_inference_engine/
 |   ├── Benchmark_test.exe
 │   ├── matmul_test.c          # Main file to test correctness of matmul function
 |   ├── matmul_test.exe
+|   ├── qmatmul_test.c         # correctness of qMatmulAcc32, quantize/dequantize and QForwardPass vs ForwardPass
+|   ├── qedge_test.c           # edge cases: hand computed values, zeros, +-127, huge/tiny values, Inf input
+|   ├── Benchmark_quant.c      # float vs int8 benchmark (matmul and forward pass)
 |   └── test.exe
 ├── export_C_data.py.py          # PY file used to import weights from PYTORCH
 ├── matrix.h            # matrix files contain declarations and functions to operate matrices
@@ -95,3 +100,26 @@ For bigger vectors we observe a doubling in speedup compared to just the SIMD fu
 The only visible downside is with smaller vectors: here the threading actually slows down the process by 0.00003 s overall, due to the larger overhead in the instruction that unfortunately has a bigger impact than the improvement received by threading, therefore making it slightly worse. I still decided to keep this structure even if the previous version was better for performance because it was just a matter of copying the previous setup and for my projects aim I find this discovery more educationally relevant than a mere 0.0003 optimization of an edge case.
 
 Tests using dynamic scheduling: little to no difference can be observed, the operating times are basically the same, just slightly worse for dynamic scheduling, unnoticeble in the the big picture. The simple static scheduling is perfect for this project since every matmul divides the multiplications evenly for every cicle of the for loop, making the overhead of the dynamic scheduling useless for what it actually brings as an optimization.
+
+
+# Quantization benchmark (float vs int8)
+Run with `gcc -O2 -mavx2 -mfma -fopenmp -o tests/Benchmark_quant.exe tests/Benchmark_quant.c matrix.c network.c quantization.c -lm`.
+Functions used: `BenchmarkMatMul` (float), `BenchmarkQMatMul` (`qMatmulAcc32`) and `BenchmarkForward` (float `ForwardPass` / `QForwardPass`), all measuring wall-clock time.
+Note: `BenchmarkMatMul` still uses `clock()`, whose resolution on Windows is ~1 ms, so the float times of the smallest sizes are coarse.
+
+| Matmul size | float (s) | int8 (s) | speedup |
+|---|---|---|---|
+| 1x512 * 512x512 | 0.000120 | 0.000060 | 2.00x |
+| 1x2048 * 2048x2048 | 0.001600 | 0.000340 | 4.71x |
+| 64x512 * 512x512 | 0.001000 | 0.000580 | 1.72x |
+| 256x256 * 256x256 | 0.001000 | 0.000400 | 2.50x |
+| 512x512 * 512x512 | 0.004400 | 0.001720 | 2.56x |
+| 1024x1024 * 1024x1024 | 0.029600 | 0.013200 | 2.24x |
+
+| Forward pass (1 x n input) | float (s) | quantized (s) | speedup |
+|---|---|---|---|
+| 784-512-256-10 | 0.000420 | 0.000235 | 1.79x |
+| 1024-2048-2048-1024 | 0.002660 | 0.001240 | 2.15x |
+| 4096-4096-4096 | 0.014300 | 0.004200 | 3.40x |
+
+Accuracy: relative error of the quantized forward pass vs the float one is ~0.1-1.1% on the test networks.

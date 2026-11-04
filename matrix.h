@@ -16,6 +16,8 @@ void Choose_Matmul_Method(matrix_t* A, matrix_t* B, matrix_t* output);
 void MatMul_SIMD_Blocks(matrix_t* A, matrix_t* B, matrix_t* output);
 void MatMul_SIMD_Vector(matrix_t* A, matrix_t* B, matrix_t* output);
 void BiasSum(matrix_t* A, matrix_t* bias);
+//Applies ReLU (max(0, x)) to every element of the matrix
+void ReLU(matrix_t* A);
 void InitMatrixRandom(matrix_t* A);
 void CleanMatrix(matrix_t* A);
 float GetData(matrix_t* mat, int row, int col);

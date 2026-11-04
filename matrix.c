@@ -257,3 +257,17 @@ void BiasSum(matrix_t* output, matrix_t* bias){
 
 }
 
+void ReLU(matrix_t* mat){
+    int i;
+
+    if (mat == NULL){
+        printf("Invalid input. \n");
+        return;
+    }
+
+    for(i = 0; i < mat->rows * mat->cols; i++){
+        if(mat->data[i] < 0.0f)
+            mat->data[i] = 0.0f;
+    }
+}
+
