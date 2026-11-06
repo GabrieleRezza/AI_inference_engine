@@ -16,38 +16,41 @@ This neural engine will probably be reused in a later project or revisited later
 
 ## Project Structure
 
-'''
+```
 AI_inference_engine/
 ├── tests/
-│   ├── Benchmark_test.c          # Main file for benchmark tests
-|   ├── Benchmark_test.exe
-│   ├── matmul_test.c          # Main file to test correctness of matmul function
-|   ├── matmul_test.exe
-|   ├── qmatmul_test.c         # correctness of qMatmulAcc32, quantize/dequantize and QForwardPass vs ForwardPass
-|   ├── qedge_test.c           # edge cases: hand computed values, zeros, +-127, huge/tiny values, Inf input
-|   ├── Benchmark_quant.c      # float vs int8 benchmark (matmul and forward pass)
-|   └── test.exe
-├── export_C_data.py          # PY file that translates the weights and biases of a trained PyTorch network into weights_biases.bin
-├── matrix.h            # matrix files contain declarations and functions to operate matrices
-├── matrix.c    
-├── network.h         # network files contain declarations and functions to 
+│   ├── Benchmark_test.c      # main file for benchmark tests
+│   ├── Benchmark_test.exe
+│   ├── matmul_test.c         # correctness of the matmul function
+│   ├── matmul_test.exe
+│   ├── qmatmul_test.c        # correctness of qMatmulAcc32, quantize/dequantize and QForwardPass vs ForwardPass
+│   ├── qedge_test.c          # edge cases: hand computed values, zeros, +-127, huge/tiny values, Inf input
+│   ├── Benchmark_quant.c     # float vs int8 benchmark (matmul and forward pass)
+│   └── test.exe
+├── export_C_data.py          # translates the weights and biases of a trained PyTorch network into weights_biases.bin
+├── matrix.h                  # declarations and functions to operate on matrices
+├── matrix.c
+├── network.h                 # declarations and functions for the network (loading, forward pass)
 ├── network.c
-├── quantization.h / quantization.c   # int8 quantization functions
-└── weights_biases.bin       # binary file with the weights and biases, created by export_C_data.py
-'''
+├── quantization.h            # int8 quantization functions
+├── quantization.c
+└── weights_biases.bin        # weights and biases, created by export_C_data.py
+```
 
 ## Input Weights-Biases Structure
 Format of the input file for trained weights and biases loaded into the network
 
+```
 [magic_number]              (int32)
 [num_layers]                (int32)
 for every layer:
-    [input_size]             (int32)
-    [output_size]             (int32)
+    [input_size]            (int32)
+    [output_size]           (int32)
 --- end of header ---
 for every layer, in order:
     [weights]   input_size * output_size float, row-major
-    [bias]   output_size float
+    [bias]      output_size float
+```
 
 
 ## Prerequisites
