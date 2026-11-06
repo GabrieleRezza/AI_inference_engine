@@ -110,12 +110,13 @@ While talking about this we also realized that, without embedding, attention and
 # Benchmark tests
 BenchmarkMatMul times based on matrix size and iterations
 
-|    Size    |  Iterations  |  Naive(s)  | Blocking and Reordering  : --> | 16 | 32 | 64 || SIMD |     Speedup         | 
-|------------|--------------|------------|--------------------------------|----|----|----||------|---------------------|
-|  Vect  x  256X256  | 1500 |  0.0004 s |  0.00035 s  |  0.00035 s  |  0.00035 s ||  0.000053 s  |  X 7.547
-|  Vect  x  512x512  |  150 |  0.0022 s |  0.0014  s  |  0.00138 s  |  0.0014 s  ||   0.00025 s  |  X 8.80
-| 256x256  x  256x256 | 100 |  0.096  s |  0.085/86 s |  0.086/87 s |  0.087 s   ||    0.012 s   |  X 8.00
-| 512x512  x  512x512 | 10  |   1.13 s  |  0.69/70 s  |  0.69/70 s  |  0.697 s   ||    0.11 s    |  X 10.27
+
+| Size | Iterations | Naive (s) | Blocking 16 (s) | Blocking 32 (s) | Blocking 64 (s) | SIMD (s) | Speedup (SIMD vs naive) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Vect x 256x256 | 1500 | 0.0004 | 0.00035 | 0.00035 | 0.00035 | 0.000053 | 7.55x |
+| Vect x 512x512 | 150 | 0.0022 | 0.0014 | 0.00138 | 0.0014 | 0.00025 | 8.80x |
+| 256x256 x 256x256 | 100 | 0.096 | 0.085/86 | 0.086/87 | 0.087 | 0.012 | 8.00x |
+| 512x512 x 512x512 | 10 | 1.13 | 0.69/70 | 0.69/70 | 0.697 | 0.11 | 10.27x |
  
 After experimenting with different sizes for cache blocking it can be observed a small increase in performance for Vect X Matrix multiplications: around 
 12% and 36% respectively for 256x256 and 512x512. 
@@ -130,11 +131,12 @@ In this project, since the kind of multiplication will always be vect X matrix, 
 
 
 
-|    Size    |  Iterations  |   Naive (s)  |  SIMD + Optimized Threading BLOCK 128 |     Speedup       | 
-|  Vect  x  256X256  | 1500 |   0.0004 s   |             0.00008  s                |   X  5.00
-|  Vect  x  512x512  |  150 |   0.0022 s   |             0.00014  s                |   X  15.71
-| 256x256  x  256x256 | 100 |   0.096  s   |             0.0039   s                |   X  24.61 
-| 512x512  x  512x512 | 10  |    1.13 s    |             0.0325   s                |   X  34.77
+| Size | Iterations | Naive (s) | SIMD + Optimized Threading, block 128 (s) | Speedup |
+|---|---:|---:|---:|---:|
+| Vect x 256x256 | 1500 | 0.0004 | 0.00008 | 5.00x |
+| Vect x 512x512 | 150 | 0.0022 | 0.00014 | 15.71x |
+| 256x256 x 256x256 | 100 | 0.096 | 0.0039 | 24.61x |
+| 512x512 x 512x512 | 10 | 1.13 | 0.0325 | 34.77x |
 
 After implementing threading and optimizing it by creating two different functions (one for general matrices and one specifically designed for vectors), the results of the benchmark tests are better than expected. 
 For bigger vectors we observe a doubling in speedup compared to just the SIMD function, while with matrices multiplications we are over the 3X mark compared to just the implementation of SIMD.
