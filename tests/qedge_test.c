@@ -16,19 +16,24 @@ static void test_hand(void){
     int8_t a[] = {1,-2,3, 0,127,-127}, b[] = {4,5, -6,7, 8,-9};
     //row0: 1*4+-2*-6+3*8 = 40 ; 1*5+-2*7+3*-9 = -36 ; row1: 127*-6+-127*8 = -1778 ; 127*7+-127*-9 = 2032
     int32_t exp[] = {40,-36,-1778,2032}, expb[] = {140,-136+100,-1678,2132};
+
     memcpy(A->data_8,a,6); memcpy(B->data_8,b,6);
     A->scale_factor = 2.0f; B->scale_factor = 3.0f;
     bias->data_32[0] = 100; bias->data_32[1] = 0;
     CHECK(qMatmulAcc32(A,B,acc,NULL)==0,"err");
+
     for(int i=0;i<4;i++) CHECK(acc->data_32[i]==exp[i],"hand nobias [%d]=%d exp %d",i,acc->data_32[i],exp[i]);
     CHECK(acc->scale_factor==6.0f,"acc scale %f",acc->scale_factor);
     bias->data_32[1] = 0;
     CHECK(qMatmulAcc32(A,B,acc,bias)==0,"err");
+
     int32_t eb[] = {140,-36,-1778+100,2032};   //bias is per column: col0 +100, col1 +0
+
     for(int i=0;i<4;i++) CHECK(acc->data_32[i]==eb[i],"hand bias [%d]=%d exp %d",i,acc->data_32[i],eb[i]);
     (void)expb;
     //qMatmulSIMD: max |acc| = 2032 -> rescale 127/2032 ; 2032 -> 127, -1778 -> -111.1 -> -111, 40 -> 2.5 -> 2 (ties to even), -36 -> -2.25 -> -2
     CHECK(qMatmulSIMD(A,B,acc,out,NULL)==0,"err");
+
     int8_t eo[] = {2,-2,-111,127};
     for(int i=0;i<4;i++) CHECK(out->data_8[i]==eo[i],"qMatmulSIMD [%d]=%d exp %d",i,out->data_8[i],eo[i]);
     printf("hand-computed 2x3*3x2 + bias + qMatmulSIMD: %s\n", failures? "FAIL":"ok");
@@ -40,10 +45,13 @@ static void test_uniform(int v_a, int v_b, int K, const char *name){
     Q_matrix32_t *acc = createMatrix32(5,19);
     int bad = 0;
     memset(A->data_8, v_a, 5*K); memset(B->data_8, v_b, K*19);
+
     for(int i=0;i<5*K;i++) A->data_8[i]=(int8_t)v_a;
     for(int i=0;i<K*19;i++) B->data_8[i]=(int8_t)v_b;
+
     qMatmulAcc32(A,B,acc,NULL);
     for(int i=0;i<5*19;i++) if(acc->data_32[i]!=v_a*v_b*K) bad++;
+
     printf("%-28s K=%-6d exp %d : %s\n", name, K, v_a*v_b*K, bad?"FAIL":"ok");
     CHECK(bad==0,"%s: %d wrong",name,bad);
     deleteMatQ8(A);deleteMatQ8(B);deleteMatQ32(acc);
@@ -53,7 +61,9 @@ static void test_requant_zero(void){
     Q_matrix32_t *acc = createMatrix32(3,5); Q_matrix8_t *o = createMatrix8(3,5);
     memset(acc->data_32,0,15*4); acc->scale_factor = 4.0f;
     CHECK(requantizeSIMD(acc,o,127.0f)==0,"requant zero err");
+
     for(int i=0;i<15;i++) CHECK(o->data_8[i]==0,"requant zero");
+
     printf("requantizeSIMD all-zero acc: ok(no NaN, scale=%f)\n", o->scale_factor);
     acc->data_32[3] = 2000000000; acc->data_32[4] = -2000000000;
     CHECK(requantizeSIMD(acc,o,127.0f)==0,"requant big err");
@@ -65,11 +75,15 @@ static void test_requant_zero(void){
 static network_t make_net(const int *s, int n, float wv, float bv){
     network_t net; net.layer_quantity=n; net.max_layer_size=0;
     net.layers=_mm_malloc(sizeof(layer_t)*n,32);
+
     for(int i=0;i<n;i++){
         layer_t *l=&net.layers[i]; l->input_size=s[i]; l->output_size=s[i+1];
+
         if(s[i]>net.max_layer_size) net.max_layer_size=s[i];
         if(s[i+1]>net.max_layer_size) net.max_layer_size=s[i+1];
+
         l->weights=CreateMatrix(s[i],s[i+1]); l->biases=CreateMatrix(1,s[i+1]);
+
         for(int j=0;j<s[i]*s[i+1];j++) l->weights->data[j]=wv*(((j*7)%11)-5);
         for(int j=0;j<s[i+1];j++) l->biases->data[j]=bv;
     }
@@ -79,12 +93,16 @@ static network_t make_net(const int *s, int n, float wv, float bv){
 static void test_fwd(const char *name, float in_v, float wv, float bv, int rows){
     int s[]={20,33,7};
     network_t net=make_net(s,2,wv,bv); q_network_t q;
+    
     if(QuantizeNetwork(&net,&q)){ printf("%s: QuantizeNetwork FAILED\n",name); failures++; return; }
     matrix_t *in=CreateMatrix(rows,20);
+
     for(int i=0;i<rows*20;i++) in->data[i]=in_v*(((i*3)%7)-2);
+
     matrix_t *f=NULL,*o=QForwardPass(&q,in);
     if(rows==1) f=ForwardPass(&net,in);
     CHECK(o!=NULL,"%s: NULL",name);
+
     if(o){
         int nan=0; double num=0,den=0;
         for(int i=0;i<rows*7;i++){ if(!isfinite(o->data[i])) nan++; if(f){double d=f->data[i]-o->data[i];num+=d*d;den+=(double)f->data[i]*f->data[i];} }
@@ -116,6 +134,7 @@ int main(void){
     test_fwd("huge weights 1e15",1.0f,1e15f,0.1f,1);
     test_fwd("batch 5 rows",1.0f,0.1f,0.1f,5);
     //NaN / Inf inputs must be rejected, not crash
+
     { int s[]={20,33,7}; network_t net=make_net(s,2,0.1f,0.1f); q_network_t q; QuantizeNetwork(&net,&q);
       matrix_t *in=CreateMatrix(1,20); for(int i=0;i<20;i++) in->data[i]=1.0f; in->data[3]=INFINITY;
       matrix_t *o=QForwardPass(&q,in); printf("Inf input -> %s\n", o?"returned a matrix (BAD)":"NULL (rejected)"); CHECK(o==NULL,"inf accepted");
