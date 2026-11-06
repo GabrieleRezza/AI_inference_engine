@@ -1,17 +1,17 @@
 # NEURAL INFERENCE ENGINE
 
-A simple yet complete project diving into the fundamentals of low-level programming for Artificial Intelligence. A full transition from a simple sistem to a complete engine with optimization, multi-threading and quantization.
+A simple yet complete project diving into the fundamentals of low-level programming for Artificial Intelligence. A full transition from a simple system to a complete engine with optimization, multi-threading and quantization.
 
 # MAIN TARGET
 
 This project is a personal learning journey behind the world of AI. 
-My goal was to expand my portfolio, analizing the low-level programming of AI by build a full operational neural engine by hand with the help of Claude, which was guiding me through the project and helping me to correct my mistakes, while always keeping the distance and never writing code by itself.
-This neural engine will probably be reused in a later project or rivisited later to adapt it to other uses.
+My goal was to expand my portfolio, analyzing the low-level programming of AI by building a full operational neural engine by hand with the help of Claude, which was guiding me through the project and helping me to correct my mistakes, while always keeping the distance and never writing code by itself.
+This neural engine will probably be reused in a later project or revisited later to adapt it to other uses.
 
 > **Note on authorship:** the whole project has been written entirely by hand, with the only exception of the correction of the final steps of the quantization functions (the int8 matmul kernel `qMatmulAcc32`/`qMatmulSIMD`, `dequantizeAcc32` and the fixes to the other quantization functions) and the creation of the quantized forward pass (`QuantizeNetwork`, `QForwardPass`, `FreeQNetwork`) together with its test `tests/qmatmul_test.c`, which were implemented by Claude after a review of my code.
 > The very last part of the project, the rewrite of `export_C_data.py` and the basic safety checks on the input data (both in the Python file and in `LoadNetworkHeader` inside `network.c`), was also implemented by Claude Code, as the final closing step of the initial project.
 
-> **What this engine can and can not do:** it runs fully-connected networks (matrix multiplication + bias + ReLU between the layers, float or int8 quantized). It can hypothetically be used to test models like MNIST (digit recognition) and similar simple networks, but it can NOT run a real LLM, since embeddings, attention, normalizations and the other operations of modern models are not implemented.
+> **What this engine can and cannot do:** it runs fully-connected networks (matrix multiplication + bias + ReLU between the layers, float or int8 quantized). It can hypothetically be used to test models like MNIST (digit recognition) and similar simple networks, but it can NOT run a real LLM, since embeddings, attention, normalizations and the other operations of modern models are not implemented.
 
 
 ## Project Structure
@@ -81,8 +81,8 @@ Basic checks are also done on the data: the script refuses files that are too bi
 I started the project with the core structure and functions needed for the matrices: main struct, create, delete, initialize, clean and multiply functions. Since I already had a strong base in C programming I wrote a large majority of the functions alone and used Claude only to find typos and correct some mistakes.
 After completing the matrix.c file and testing that everything worked by manually comparing the results with hand written tests, I confronted Claude to structure the next steps for the final days of the first week and the first half of the second one. 
 
-Thanks to Claude's advices I understood the structure needed for the network file and started writing the main loading datas functions, while keeping track of the data structure itself, later reused to create an export_C_data file that translates PyTorch files into a usable file.bin for my project.
-I also implemented some auxilary functions to simplify the readability of other functions under the tips given by Claude. During those days I discovered alone one of the optimizations for the Forward_pass, the ping pong buffers, and also discussed about cache blocking and loop reordering, understanding deeply their advantages in order to implement them in the best possible way.
+Thanks to Claude's advice I understood the structure needed for the network file and started writing the main loading data functions, while keeping track of the data structure itself, later reused to create an export_C_data file that translates PyTorch files into a usable file.bin for my project.
+I also implemented some auxiliary functions to simplify the readability of other functions under the tips given by Claude. During those days I discovered alone one of the optimizations for the Forward_pass, the ping pong buffers, and also discussed about cache blocking and loop reordering, understanding deeply their advantages in order to implement them in the best possible way.
 
 After almost two weeks I completed the network files, checked their correctness by hand and with the starting of the third week around the corner I created a new file to keep track of the different times my CPU took to complete a matmul function based on the different sizes of the matrices, and therefore created a Benchmark table to document them all (all the results and considerations about benchmark tests can be found in the benchmark section).
 
@@ -94,17 +94,17 @@ The real implementation was extremely complex, especially handling every edge ca
 
 Testing the final functions after debugging everything showcased the incredible speedup brought by these implementations.
 
-Finally the last step of this project was to implement quantization to optimize everything even further, so I naturalluy started by creating the core functions to handle this new type of data and matrices: new create, delete, clear functions and simple versions of quantize and dequantize.
+Finally the last step of this project was to implement quantization to optimize everything even further, so I naturally started by creating the core functions to handle this new type of data and matrices: new create, delete, clear functions and simple versions of quantize and dequantize.
 
 During this week, months into the project, I realized that this step required far more work than expected, I implemented raw, naive functions for every quantization step after consulting Claude to create a working plan and using it as a guide and a debugging assistant for every new implementation. 
-Having completed this initial version, the last thing to do was implement SIMD and threading in these new functions. Here is where Claude Code finally touched the codebase: after doing half the functions myself I decided to give Claude permission to finalize everything alone: completed qMatmulSIMD and created the last two functions, tested everything and made minor changes in the previous functions to clean them up of typos. The only big change that Claude suggested was to change the use of the SIMD maddubs function, getting read of a slow logic and presenting me with a new one. 
+Having completed this initial version, the last thing to do was implement SIMD and threading in these new functions. Here is where Claude Code finally touched the codebase: after doing half the functions myself I decided to give Claude permission to finalize everything alone: completed qMatmulSIMD and created the last two functions, tested everything and made minor changes in the previous functions to clean them up of typos. The only big change that Claude suggested was to change the use of the SIMD maddubs function, getting rid of a slow logic and presenting me with a new one. 
 
-To test that everything still worked after Claude's work I run various new tests of quantized matmul and ForwardPass with successfull results.
+To test that everything still worked after Claude's work I ran various new tests of quantized matmul and ForwardPass with successful results.
 
 As the closing step of the initial project I gave Claude Code the last two tasks. The first one was to completely restructure `export_C_data.py`, which was just a hardcoded example: now it reads a trained PyTorch network, checks that it is made only of Linear layers and ReLU (the only things my engine computes), transposes the weights, writes the binary file and reads it again to verify it. Claude also tested it with the demo network, whose result matches the one computed by hand.
 The second task was security: I asked for simple basic checks to make sure that no dangerous data could be processed. Claude pointed out that the real risk is not the binary file but the PyTorch file itself, since it is a pickle that can execute code when opened, so the script now loads only tensors by default and the whole models need the explicit `--trust` option. It also added limits on layers and sizes, both in the Python file and in `LoadNetworkHeader`, which before this trusted the header completely and used its values to allocate memory.
 
-While talking about this we also realized that, without embedding, attention and the other mechanisms, this engine can not run a real LLM. It stays a complete and working base for simple fully-connected networks (like MNIST), and the optimizations done (SIMD, threading, quantization) are the same ones used in the matrix multiplications of bigger models. The test with a real PyTorch file has not been done yet, because PyTorch was not installed on my machine.
+While talking about this we also realized that, without embedding, attention and the other mechanisms, this engine cannot run a real LLM. It stays a complete and working base for simple fully-connected networks (like MNIST), and the optimizations done (SIMD, threading, quantization) are the same ones used in the matrix multiplications of bigger models. The test with a real PyTorch file has not been done yet, because PyTorch was not installed on my machine.
 
 
 # Benchmark tests
@@ -137,10 +137,10 @@ In this project, since the kind of multiplication will always be vect X matrix, 
 | 512x512  x  512x512 | 10  |    1.13 s    |             0.0325   s                |   X  34.77
 
 After implementing threading and optimizing it by creating two different functions (one for general matrices and one specifically designed for vectors), the results of the benchmark tests are better than expected. 
-For bigger vectors we observe a doubling in speedup compared to just the SIMD function, while with matc=rices multiplications we are over the 3X mark compared to just the implementation of SIMD.
-The only visible downside is with smaller vectors: here the threading actually slows down the process by 0.00003 s overall, due to the larger overhead in the instruction that unfortunately has a bigger impact than the improvement received by threading, therefore making it slightly worse. I still decided to keep this structure even if the previous version was better for performance because it was just a matter of copying the previous setup and for my projects aim I find this discovery more educationally relevant than a mere 0.0003 optimization of an edge case.
+For bigger vectors we observe a doubling in speedup compared to just the SIMD function, while with matrices multiplications we are over the 3X mark compared to just the implementation of SIMD.
+The only visible downside is with smaller vectors: here the threading actually slows down the process by 0.00003 s overall, due to the larger overhead in the instruction that unfortunately has a bigger impact than the improvement received by threading, therefore making it slightly worse. I still decided to keep this structure even if the previous version was better for performance because it was just a matter of copying the previous setup and for my project's aim I find this discovery more educationally relevant than a mere 0.0003 optimization of an edge case.
 
-Tests using dynamic scheduling: little to no difference can be observed, the operating times are basically the same, just slightly worse for dynamic scheduling, unnoticeble in the the big picture. The simple static scheduling is perfect for this project since every matmul divides the multiplications evenly for every cicle of the for loop, making the overhead of the dynamic scheduling useless for what it actually brings as an optimization.
+Tests using dynamic scheduling: little to no difference can be observed, the operating times are basically the same, just slightly worse for dynamic scheduling, unnoticeable in the big picture. The simple static scheduling is perfect for this project since every matmul divides the multiplications evenly for every cycle of the for loop, making the overhead of the dynamic scheduling useless for what it actually brings as an optimization.
 
 
 # Quantization benchmark (float vs int8)
@@ -172,3 +172,6 @@ The project is considered complete as a first version, but it can be expanded in
 - **Test with a model trained by myself:** train a simple fully-connected network with PyTorch (for example on MNIST, with a structure like 784-128-10), save it with `torch.save(model.state_dict(), ...)`, export it with `export_C_data.py` and compare the accuracy and the speed of the float and of the int8 quantized version with the PyTorch one. This would be the first test of the whole pipeline on real data, since for now only the demo network and random test networks have been used.
 - **Support for the `safetensors` format:** it is the format used by most of the models available online and it contains only tensors and no code, so it can be read without the pickle risks explained in the usage section.
 - **Functions for LLMs:** to run a real language model the engine is missing embedding, attention, normalization layers (LayerNorm / RMSNorm), other activation functions (GELU, SiLU, softmax) and a different way to handle the input (tokens and a sequence instead of a single vector). The matrix multiplications, the SIMD, the threading and the quantization already done would be reused for these new parts.
+
+## License
+MIT, see the `LICENSE` file.
