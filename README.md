@@ -9,6 +9,9 @@ My goal was to expand my portfolio, analizing the low-level programming of AI by
 This neural engine will probably be reused in a later project or rivisited later to adapt it to other uses.
 
 > **Note on authorship:** the whole project has been written entirely by hand, with the only exception of the correction of the final steps of the quantization functions (the int8 matmul kernel `qMatmulAcc32`/`qMatmulSIMD`, `dequantizeAcc32` and the fixes to the other quantization functions) and the creation of the quantized forward pass (`QuantizeNetwork`, `QForwardPass`, `FreeQNetwork`) together with its test `tests/qmatmul_test.c`, which were implemented by Claude after a review of my code.
+> The very last part of the project, the rewrite of `export_C_data.py` and the basic safety checks on the input data (both in the Python file and in `LoadNetworkHeader` inside `network.c`), was also implemented by Claude Code, as the final closing step of the initial project.
+
+> **What this engine can and can not do:** it runs fully-connected networks (matrix multiplication + bias + ReLU between the layers, float or int8 quantized). It can hypothetically be used to test models like MNIST (digit recognition) and similar simple networks, but it can NOT run a real LLM, since embeddings, attention, normalizations and the other operations of modern models are not implemented.
 
 
 ## Project Structure
@@ -24,12 +27,13 @@ AI_inference_engine/
 |   ├── qedge_test.c           # edge cases: hand computed values, zeros, +-127, huge/tiny values, Inf input
 |   ├── Benchmark_quant.c      # float vs int8 benchmark (matmul and forward pass)
 |   └── test.exe
-├── export_C_data.py.py          # PY file used to import weights from PYTORCH
+├── export_C_data.py          # PY file that translates the weights and biases of a trained PyTorch network into weights_biases.bin
 ├── matrix.h            # matrix files contain declarations and functions to operate matrices
 ├── matrix.c    
 ├── network.h         # network files contain declarations and functions to 
 ├── network.c
-└── weights_biases.bin       # HTML pages rendered via Flask routes
+├── quantization.h / quantization.c   # int8 quantization functions
+└── weights_biases.bin       # binary file with the weights and biases, created by export_C_data.py
 '''
 
 ## Input Weights-Biases Structure
@@ -47,10 +51,30 @@ for every layer, in order:
 
 
 ## Prerequisites
-- C compiler (MSYS2)
-- Python 3.10+
+- C compiler (MSYS2) with support for AVX2 and OpenMP
+- Python 3.10+ with `numpy`
+- PyTorch (`torch`), needed only to export a `.pt` / `.pth` file. The `--demo` mode of the export file works without it
 
 ## Usage
+
+**1. Create the weights file.** The export file reads a PyTorch network and writes `weights_biases.bin` in the format described above:
+
+```
+python export_C_data.py model.pt -o weights_biases.bin
+python export_C_data.py --demo
+```
+
+`--demo` exports a small hardcoded network (2-3-2), useful to check that everything works without any model.
+
+The network must be made only of `Linear` layers with a `ReLU` between them (and no ReLU after the last one), because this is exactly what the C engine computes. PyTorch saves the weights as (output, input), so the script transposes them to the (input, output) order used by the engine. At the end it reads the file again to check that the data is correct.
+
+**2. Safety.** A `.pt` file is a "pickle", a Python format that can also contain code, and that code runs when the file is opened. For this reason the script by default loads only the tensors (`weights_only=True`) and refuses anything else. Save the model with `torch.save(model.state_dict(), "model.pt")` to use it directly. A whole saved model (`torch.save(model, ...)`) is accepted only with the `--trust` option, to be used only with files you created or trust. Never use it with files downloaded from unknown sources.
+
+Basic checks are also done on the data: the script refuses files that are too big, networks with too many layers or too large sizes (max 256 layers, 2^20 neurons per layer, 2^28 parameters), layers that don't match each other and NaN/inf values. The same limits are checked by `LoadNetworkHeader` in the C code, so a corrupted `.bin` file is rejected before any memory is allocated.
+
+**3. Run the engine.** Load the file with `LoadNetworkHeader` and `LoadNetworkWeights`, then use `ForwardPass` (float) or `QuantizeNetwork` + `QForwardPass` (int8). The tests and benchmarks in `tests/` are compiled like the one shown in the quantization benchmark section.
+
+**Limits.** Hypothetically the engine can be used with MNIST and similar simple networks, but not with a real LLM (see the note at the beginning).
 
 
 ## Project timeline, problems and solutions
@@ -76,6 +100,11 @@ During this week, months into the project, I realized that this step required fa
 Having completed this initial version, the last thing to do was implement SIMD and threading in these new functions. Here is where Claude Code finally touched the codebase: after doing half the functions myself I decided to give Claude permission to finalize everything alone: completed qMatmulSIMD and created the last two functions, tested everything and made minor changes in the previous functions to clean them up of typos. The only big change that Claude suggested was to change the use of the SIMD maddubs function, getting read of a slow logic and presenting me with a new one. 
 
 To test that everything still worked after Claude's work I run various new tests of quantized matmul and ForwardPass with successfull results.
+
+As the closing step of the initial project I gave Claude Code the last two tasks. The first one was to completely restructure `export_C_data.py`, which was just a hardcoded example: now it reads a trained PyTorch network, checks that it is made only of Linear layers and ReLU (the only things my engine computes), transposes the weights, writes the binary file and reads it again to verify it. Claude also tested it with the demo network, whose result matches the one computed by hand.
+The second task was security: I asked for simple basic checks to make sure that no dangerous data could be processed. Claude pointed out that the real risk is not the binary file but the PyTorch file itself, since it is a pickle that can execute code when opened, so the script now loads only tensors by default and the whole models need the explicit `--trust` option. It also added limits on layers and sizes, both in the Python file and in `LoadNetworkHeader`, which before this trusted the header completely and used its values to allocate memory.
+
+While talking about this we also realized that, without embedding, attention and the other mechanisms, this engine can not run a real LLM. It stays a complete and working base for simple fully-connected networks (like MNIST), and the optimizations done (SIMD, threading, quantization) are the same ones used in the matrix multiplications of bigger models. The test with a real PyTorch file has not been done yet, because PyTorch was not installed on my machine.
 
 
 # Benchmark tests
@@ -135,3 +164,11 @@ Note: `BenchmarkMatMul` still uses `clock()`, whose resolution on Windows is ~1 
 | 4096-4096-4096 | 0.014300 | 0.004200 | 3.40x |
 
 Accuracy: relative error of the quantized forward pass vs the float one is ~0.1-1.1% on the test networks.
+
+
+# Future developments
+The project is considered complete as a first version, but it can be expanded in the future:
+
+- **Test with a model trained by myself:** train a simple fully-connected network with PyTorch (for example on MNIST, with a structure like 784-128-10), save it with `torch.save(model.state_dict(), ...)`, export it with `export_C_data.py` and compare the accuracy and the speed of the float and of the int8 quantized version with the PyTorch one. This would be the first test of the whole pipeline on real data, since for now only the demo network and random test networks have been used.
+- **Support for the `safetensors` format:** it is the format used by most of the models available online and it contains only tensors and no code, so it can be read without the pickle risks explained in the usage section.
+- **Functions for LLMs:** to run a real language model the engine is missing embedding, attention, normalization layers (LayerNorm / RMSNorm), other activation functions (GELU, SiLU, softmax) and a different way to handle the input (tokens and a sequence instead of a single vector). The matrix multiplications, the SIMD, the threading and the quantization already done would be reused for these new parts.

@@ -6,6 +6,9 @@
 #include <omp.h>
 #include "quantization.h"
 #define MAGIC_NUMBER 0x1404A715
+#define MAX_LAYERS 256
+#define MAX_DIM (1 << 20)
+#define MAX_PARAMS (1 << 28)   //floats per layer, also keeps rows * cols inside an int
 
 //Reads the first lines of the input file, checks if everything fits and fills the network struct with the correct data. !! The caller needs to free(net) in case of failure
 int LoadNetworkHeader(network_t *net, FILE *fp){
@@ -28,6 +31,12 @@ int LoadNetworkHeader(network_t *net, FILE *fp){
         return 0;
     }
 
+    //Basic sanity check, a corrupted file must not drive the allocation size (same limits as export_C_data.py)
+    if(net->layer_quantity < 1 || net->layer_quantity > MAX_LAYERS){
+        printf("Invalid number of layers: %d. \n", net->layer_quantity);
+        return 0;
+    }
+
     net->layers = _mm_malloc(sizeof(layer_t) * net->layer_quantity, 32);
     if(net->layers == NULL){
         printf("Memory allocation error. \n");
@@ -40,7 +49,17 @@ int LoadNetworkHeader(network_t *net, FILE *fp){
             net->layers = NULL;
             return 0;
         }
-        
+
+        //Sizes must be positive and bounded, and every layer must take as input the output of the previous one
+        if(net->layers[i].input_size < 1 || net->layers[i].input_size > MAX_DIM ||
+           net->layers[i].output_size < 1 || net->layers[i].output_size > MAX_DIM ||
+           (i > 0 && net->layers[i].input_size != net->layers[i - 1].output_size) ||
+           (long long)net->layers[i].input_size * net->layers[i].output_size > MAX_PARAMS){
+            printf("Invalid layer sizes at layer %d. \n", i);
+            _mm_free(net->layers);
+            net->layers = NULL;
+            return 0;
+        }
     }
     return 1;
     //the file will be closed only after the LoadNetworkWeights function
