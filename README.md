@@ -62,15 +62,27 @@ I also implemented some auxilary functions to simplify the readability of other 
 
 After almost two weeks I completed the network files, checked their correctness by hand and with the starting of the third week around the corner I created a new file to keep track of the different times my CPU took to complete a matmul function based on the different sizes of the matrices, and therefore created a Benchmark table to document them all (all the results and considerations about benchmark tests can be found in the benchmark section).
 
-During the third week I implemented loop reordering and cache blocking, testing different block sizes searching for the best optimization for my machine. As seen in the benchmark section, different sizes still give similar results with minor changes, but every single one of them, compared to tha native implementation is far more efficient.
+During the third week I implemented loop reordering and cache blocking, testing different block sizes searching for the best optimization for my machine. As seen in the benchmark section, different sizes still give similar results with minor changes, but every single one of them, compared to the native implementation is far more efficient.
 
+In the following weeks the main goal was to implement new optimization techniques: SIMD and threading. The challenge here was handling complex low-level algebra using functions which were completely new to me while keeping the main logic intact. My working procedure here consisted in planning the changes ahead with Claude's help, checking which functions to use for my project and consulting the official Intel Intrinsics Documentation online to check how every single function would affect data. Therefore I was able to always keep track of the single changes made by every function.
+
+The real implementation was extremely complex, especially handling every edge case, AI helped me visualize those edge cases and guided me in the correct direction.
+
+Testing the final functions after debugging everything showcased the incredible speedup brought by these implementations.
+
+Finally the last step of this project was to implement quantization to optimize everything even further, so I naturalluy started by creating the core functions to handle this new type of data and matrices: new create, delete, clear functions and simple versions of quantize and dequantize.
+
+During this week, months into the project, I realized that this step required far more work than expected, I implemented raw, naive functions for every quantization step after consulting Claude to create a working plan and using it as a guide and a debugging assistant for every new implementation. 
+Having completed this initial version, the last thing to do was implement SIMD and threading in these new functions. Here is where Claude Code finally touched the codebase: after doing half the functions myself I decided to give Claude permission to finalize everything alone: completed qMatmulSIMD and created the last two functions, tested everything and made minor changes in the previous functions to clean them up of typos. The only big change that Claude suggested was to change the use of the SIMD maddubs function, getting read of a slow logic and presenting me with a new one. 
+
+To test that everything still worked after Claude's work I run various new tests of quantized matmul and ForwardPass with successfull results.
 
 
 # Benchmark tests
 BenchmarkMatMul times based on matrix size and iterations
 
 |    Size    |  Iterations  |  Naive(s)  | Blocking and Reordering  : --> | 16 | 32 | 64 || SIMD |     Speedup         | 
-|------------|--------------|------------|--------------------------------|----|----|----||------|-----------------------|
+|------------|--------------|------------|--------------------------------|----|----|----||------|---------------------|
 |  Vect  x  256X256  | 1500 |  0.0004 s |  0.00035 s  |  0.00035 s  |  0.00035 s ||  0.000053 s  |  X 7.547
 |  Vect  x  512x512  |  150 |  0.0022 s |  0.0014  s  |  0.00138 s  |  0.0014 s  ||   0.00025 s  |  X 8.80
 | 256x256  x  256x256 | 100 |  0.096  s |  0.085/86 s |  0.086/87 s |  0.087 s   ||    0.012 s   |  X 8.00
